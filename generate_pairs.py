@@ -1,4 +1,5 @@
 from os import get_terminal_size
+from random import sample, seed
 import sys
 import glob
 import subprocess
@@ -7,7 +8,7 @@ import pickle
 import tqdm
 import os.path
 
-from math import floor
+from math import floor, ceil
 from pandas_ods_reader import read_ods
 
 from make_spreadsheets import gather_shots, gather_tracks, generate_all_problematic_shot_dirs, order_tracks
@@ -15,7 +16,7 @@ from make_spreadsheets import gather_shots, gather_tracks, generate_all_problema
 
 main_dir = "/media/hdd/adrien/Friends"
 shots_dir = main_dir + "/shots"
-annotations_dir = main_dir + "/annotations/blank"
+annotations_dir = main_dir + "/annotations/filled"
 pairs_dir = main_dir + "/pairs16"
 
 tracks_file = main_dir + "/tracks-features/Friends_final.pk"
@@ -23,9 +24,11 @@ tracks_file = main_dir + "/tracks-features/Friends_final.pk"
 
 SEGMENT_LENGTH = 16
 
+seed(0)
+
 
 def gather_annotations(episode_number):
-    annotation_file = "/media/hdd/adrien/Friends/annotations/filled/annotations_ep{:02d}_filled.ods".format(episode_number)
+    annotation_file = "{}/annotations_ep{:02d}_filled.ods".format(annotations_dir, episode_number)
     df = read_ods(annotation_file, 1)
     
     pos_annotations = []
@@ -66,7 +69,50 @@ def temporal_intersection(track1, track2):
     inter = max(0, e - b + 1)
 
     return inter
-    
+
+
+def sample_modulo_1frame(begin, end, segment_length=SEGMENT_LENGTH):
+    step = ceil((end - begin + 1) / segment_length)
+    rest = segment_length*step - (end - begin + 1)
+    nb_shifts = step - rest
+    lists_of_frames = []
+    for shift in range(nb_shifts):
+        lists_of_frames.append([begin + shift + k*step for k in range(segment_length)])
+    return lists_of_frames
+
+
+def sample_modulo_2frame(begin, end):
+    lists_of_frames_1frame = sample_modulo_1frame(begin, end, segment_length=8)
+    nb_2frame = len(lists_of_frames_1frame) - 1
+    lists_of_frames_2frame = []
+    for index in range(nb_2frame):
+        frames_list = []
+        for shift in range(index, index + 2):
+            frames_list += lists_of_frames_1frame[shift]
+        lists_of_frames_2frame.append(sorted(frames_list))
+    return lists_of_frames_2frame
+
+
+def sample_modulo_4frame(begin, end):
+    lists_of_frames_1frame = sample_modulo_1frame(begin, end, segment_length=4)
+    nb_4frame = len(lists_of_frames_1frame) - 3
+    lists_of_frames_4frame = []
+    for index in range(nb_4frame):
+        frames_list = []
+        for shift in range(index, index + 4):
+            frames_list += lists_of_frames_1frame[shift]
+        lists_of_frames_4frame.append(sorted(frames_list))
+    return lists_of_frames_4frame
+
+
+def sample_random(begin, end):
+    if end - begin + 1 < 2 * SEGMENT_LENGTH:
+        return []
+    lists_of_frames = []
+    for rep in range(10):
+        lists_of_frames.append(sorted(sample(list(range(begin, end)), SEGMENT_LENGTH)))
+    return lists_of_frames
+
 
 def get_lists_of_frames(track1, track2, type_of_interaction):
 
@@ -79,16 +125,32 @@ def get_lists_of_frames(track1, track2, type_of_interaction):
     if end - begin + 1 < SEGMENT_LENGTH:
         return []
 
-    # Full interaction or no interaction
-    if type_of_interaction in [0, 2, 4]:
+    # No interaction
+    if type_of_interaction == 4:
         begin_frames = list(range(begin, end - SEGMENT_LENGTH + 2, SEGMENT_LENGTH))
         lists_of_frames = [list(range(b, b + SEGMENT_LENGTH)) for b in begin_frames]
-    # partial interactions
+        lists_of_frames += sample_modulo_1frame(begin, end)
+        lists_of_frames += sample_modulo_2frame(begin, end)
+        lists_of_frames += sample_modulo_4frame(begin, end)
+        # lists_of_frames += sample_random(begin, end)
+    # Full interaction or no interaction
+    elif type_of_interaction in [0, 2]:
+        begin_frames = list(range(begin, end - SEGMENT_LENGTH + 2, SEGMENT_LENGTH))
+        lists_of_frames = [list(range(b, b + SEGMENT_LENGTH)) for b in begin_frames]
+        lists_of_frames += sample_modulo_1frame(begin, end)
+        lists_of_frames += sample_modulo_2frame(begin, end)
+        lists_of_frames += sample_modulo_4frame(begin, end)
+    # Partial interactions
     elif type_of_interaction in [1, 3]:
-        step = floor((end - begin + 1) / SEGMENT_LENGTH)
-        lists_of_frames = [[begin + k*step for k in range(SEGMENT_LENGTH)]]
+        lists_of_frames = []
+        lists_of_frames += sample_modulo_1frame(begin, end)
+        lists_of_frames += sample_modulo_2frame(begin, end)
+        lists_of_frames += sample_modulo_4frame(begin, end)
     else:
         return []
+    
+    for frames_list in lists_of_frames:
+        assert len(frames_list) == SEGMENT_LENGTH
 
     return lists_of_frames
 
@@ -173,7 +235,7 @@ def generate_pairs_for_episode(episode_number, all_tracks=None):
 def generate_all_pairs():
     all_tracks = gather_tracks()
     for episode_number in tqdm.tqdm(range(1, 26)):
-        annotation_file = "/media/hdd/adrien/Friends/annotations/filled/annotations_ep{:02d}_filled.ods".format(episode_number)
+        annotation_file = "{}/annotations_ep{:02d}_filled.ods".format(annotations_dir, episode_number)
         if not os.path.isfile(annotation_file):
             continue
         generate_pairs_for_episode(episode_number, all_tracks)
