@@ -1,0 +1,16 @@
+char1,char2,co-occurences,interactions,physicals,non-physicals
+chandler,joey,521,237,30,207
+chandler,monica,291,117,31,86
+chandler,phoebe,282,74,5,69
+chandler,rachel,254,86,12,74
+chandler,ross,403,179,30,149
+joey,monica,295,111,14,97
+joey,phoebe,322,110,16,94
+joey,rachel,183,54,14,40
+joey,ross,313,110,21,89
+monica,phoebe,411,155,19,136
+monica,rachel,294,107,19,88
+monica,ross,304,125,29,96
+phoebe,rachel,229,83,8,75
+phoebe,ross,242,64,15,49
+rachel,ross,540,319,122,197
