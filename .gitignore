@@ -1,3 +1,4 @@
 __pycache__/*
 visualisation/*
 stats/__pycache__/*
+stats/results/*

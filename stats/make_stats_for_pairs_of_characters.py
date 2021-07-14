@@ -111,9 +111,7 @@ def compute_stats_by_character_pairs():
             # plt.title("Type of interactions in {}-character shots".format(key))
     fig.suptitle("Type of interactions by character pair", fontsize=14, y=0.12)
     plt.savefig("{}/piechart_character_pairs.pdf".format(output_dir))
-
-
-
+    plt.savefig("{}/piechart_character_pairs.png".format(output_dir))
 
 
 if __name__ == "__main__":

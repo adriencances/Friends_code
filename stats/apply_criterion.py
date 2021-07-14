@@ -312,6 +312,7 @@ def make_graphs_for_the_configs():
         plt.ylabel("Number of {}".format(cat))
         plt.title("Number {} for different IoU thresholds\n".format(cat))
         plt.savefig("{}/histogram_{}.pdf".format(output_dir, cat))
+        plt.savefig("{}/histogram_{}.png".format(output_dir, cat))
         plt.close()
 
     for FRAME_PROPORTION in FRAME_PROPORTION_VALUES:
@@ -325,6 +326,7 @@ def make_graphs_for_the_configs():
             plt.ylabel("Number of {}".format(cat))
             plt.title("Number {} for different IoU thresholds\nwhen frame proportion is {}".format(cat, FRAME_PROPORTION))
             plt.savefig("{}/histogram_{}_frame_proportion_{}.pdf".format(output_dir, cat, FRAME_PROPORTION))
+            plt.savefig("{}/histogram_{}_frame_proportion_{}.png".format(output_dir, cat, FRAME_PROPORTION))
             plt.close()
 
 

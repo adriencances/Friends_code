@@ -71,6 +71,8 @@ def get_temporal_intersection(track1, track2):
 
 
 def is_continuous(track):
+    if len(track) == 0:
+        return True
     b = int(track[0, 0])
     e = int(track[-1, 0])
     return e - b + 1 == len(track)
@@ -205,7 +207,7 @@ def compute_trajectories_and_averages_over_time():
     return mean_trajectory, averages_over_time
 
 
-def make_histograms():
+def make_histograms_overlap():
     mean_trajectory, averages_over_time = compute_trajectories_and_averages_over_time()
 
     output_dir = "results/bboxes_stats"
@@ -228,6 +230,7 @@ def make_histograms():
     plt.subplots_adjust(top=0.7)
     fig.suptitle("Histograms of bboxes intersection over\nwhole frame averaged over time for each pair", fontsize=14, y=0.9)
     plt.savefig("{}/hist_averages_over_time.pdf".format(output_dir))
+    plt.savefig("{}/hist_averages_over_time.png".format(output_dir))
 
 
     fig, axes= plt.subplots(3, 1)
@@ -245,7 +248,137 @@ def make_histograms():
     plt.subplots_adjust(top=0.7)
     fig.suptitle("Evolution of bboxes intersection over whole frame,\naveraged over all pairs", fontsize=14, y=0.9)
     plt.savefig("{}/hist_mean_trajectories.pdf".format(output_dir))
+    plt.savefig("{}/hist_mean_trajectories.png".format(output_dir))
+
+
+def get_average_head_over_body_value(track_id, episode_number, all_tracks):
+    body_track = all_tracks["episode{:02d}".format(episode_number)]["body"][track_id]
+    head_track = all_tracks["episode{:02d}".format(episode_number)]["face"][track_id]
+
+    if not is_continuous(body_track) or not is_continuous(head_track):
+        return None
+
+    # Compute temporal intersection
+    b1, e1 = tuple(map(int, body_track[[0, -1], 0]))
+    b2, e2 = tuple(map(int, head_track[[0, -1], 0]))
+
+    b = max(b1, b2)
+    e = min(e1, e2)
+
+    # Compute IoU vector to identify positive pairs
+    tube1 = body_track[b - b1:(e + 1) - b1, 1:5]
+    tube2 = head_track[b - b2:(e + 1) - b2, 1:5]
+
+    if len(tube1) == 0 or len(tube2) == 0 or tube1.min() == 0:
+        return None
+
+    ratios = tube2 / tube1
+    average_ratio = ratios.mean()
+
+    return average_ratio
+
+
+def get_average_head_over_body_ratio_values(annotation, info_by_shot, all_tracks):
+    episode_number, shot_id, person1, person2, type_of_interaction = annotation
+
+    tracks_by_shot, track_ids_by_shot, characters_by_shot = info_by_shot
+
+    tracks = tracks_by_shot[shot_id]
+    characters = characters_by_shot[shot_id]
+    track_ids = track_ids_by_shot[shot_id]
+
+    track_ids_1 = [i for i in range(len(tracks)) if characters[i] == person1]
+    track_ids_2 = [i for i in range(len(tracks)) if characters[i] == person2]
+
+    max_inter = -1
+    best_ids = None
+    for id1 in track_ids_1:
+        for id2 in track_ids_2:
+            track1 = tracks[id1]
+            track2 = tracks[id2]
+            inter = get_temporal_intersection(track1, track2)
+            if inter > max_inter:
+                max_inter = inter
+                best_ids = id1, id2
+    
+    id1, id2 = best_ids
+
+    track1 = tracks[id1]
+    track2 = tracks[id2]
+
+    track_id_1 = track_ids[id1]
+    track_id_2 = track_ids[id2]
+
+    if not is_continuous(track1) or not is_continuous(track2):
+        return []
+    
+    values = []
+
+    if track_id_1 <= 9999:
+        value = get_average_head_over_body_value(track_id_1, episode_number, all_tracks)
+        if value is not None:
+            values.append(value)
+    
+    if track_id_2 <= 9999:
+        value = get_average_head_over_body_value(track_id_2, episode_number, all_tracks)
+        if value is not None:
+            values.append(value)
+
+    return values
+
+
+def compute_average_head_over_body_ratios():
+    all_tracks = gather_tracks()
+    values_by_type = dict([("no interaction", []), ("non-physical", []), ("physical", [])])
+    for episode_number in tqdm.tqdm(range(1, 26)):
+        annotations = gather_annotations(episode_number)
+        info_by_shot = order_tracks(all_tracks, episode_number)
+        for annotation in annotations:
+            type_of_interaction = annotation[-1]
+            if type_of_interaction == 5:
+                continue
+            values = get_average_head_over_body_ratio_values(annotation, info_by_shot, all_tracks)
+            if type_of_interaction in [0, 1]:
+                cat = "physical"
+                values_by_type[cat] += values
+            elif type_of_interaction in [2, 3]:
+                cat = "non-physical"
+                values_by_type[cat] += values
+            else:
+                cat = "no interaction"
+                values_by_type[cat] += values
+
+    return values_by_type
+
+
+def make_histograms_head_over_body():
+    values_by_type = compute_average_head_over_body_ratios()
+
+
+    output_dir = "results/bboxes_stats"
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    fig, axes= plt.subplots(1, 3)
+    max_value = max([max(values_by_type[cat]) for cat in values_by_type])
+    colors = ["royalblue", "orangered", "olivedrab"]
+    for index, ax in enumerate(axes.flatten()):
+        cat = list(values_by_type.keys())[index]
+        values = values_by_type[cat]
+
+        ax.hist(values, density=True, bins=20, color=colors[index])
+        # ax.set_xlim((0, max_value))
+        # ax.set_ylim((0, 50))
+        if index == 0:
+            ax.set_ylabel("Frequency")
+        ax.set_title(cat)
+
+    plt.subplots_adjust(top=0.7)
+    fig.suptitle("Histograms of head_over_body ratio averaged over time for each character", fontsize=14, y=0.9)
+    plt.savefig("{}/hist_head_over_body.pdf".format(output_dir))
+    plt.savefig("{}/hist_head_over_body.png".format(output_dir))
 
 
 if __name__ == "__main__":
-    make_histograms()
+    make_histograms_overlap()
+    make_histograms_head_over_body()
+    # tube1, tube2 = get_average_head_over_body_value(track_id_2, episode_number, all_tracks)

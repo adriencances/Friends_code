@@ -60,6 +60,7 @@ def make_histogram_of_classes():
     plt.ylabel("Number of occurences")
     plt.title("Number of occurences by interaction class")
     plt.savefig("results/histogram_of_classes.pdf")
+    plt.savefig("results/histogram_of_classes.png")
 
 
 def get_stats_by_nb_of_characters():
@@ -132,12 +133,13 @@ def make_histogram_of_stats_by_nb_of_characters():
         # Bar plot
         fig = plt.figure(figsize = (10, 5))
     
-        plt.bar(names, values, color ='maroon', width = 0.4)
+        plt.bar(names, values, color ='olivedrab', width = 0.4)
         
         plt.xlabel("Number of interacting pairs")
         plt.ylabel("Number of occurences")
         plt.title("Number of interacting pairs in {}-character shots".format(key))
         plt.savefig("{}/hist_interactions_{}-char_shots.pdf".format(output_dir, key))
+        plt.savefig("{}/hist_interactions_{}-char_shots.png".format(output_dir, key))
 
         # Pie chart
         class_names = ["Full physical", "Partial physical", "Full non-physical", "Partial non-physical", "No interaction"]
@@ -148,6 +150,7 @@ def make_histogram_of_stats_by_nb_of_characters():
         plt.legend(patches, class_names, loc="best")
         plt.title("Type of interactions in {}-character shots".format(key))
         plt.savefig("{}/piechart_interactions_{}-char_shots.pdf".format(output_dir, key))
+        plt.savefig("{}/piechart_interactions_{}-char_shots.png".format(output_dir, key))
 
 
 if __name__ == "__main__":
