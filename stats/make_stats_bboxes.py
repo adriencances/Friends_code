@@ -30,7 +30,7 @@ pairs_dir = main_dir + "/pairs16"
 tracks_file = main_dir + "/tracks-features/Friends_final.pk"
 
 
-def gather_annotations(episode_number):
+def gather_annotations(episode_number, skip_undefined=True):
     annotation_file = "{}/annotations_ep{:02d}_filled.ods".format(annotations_dir, episode_number)
     df = read_ods(annotation_file, 1)
     
@@ -45,7 +45,7 @@ def gather_annotations(episode_number):
         type_of_interaction = interactions.index("x")
 
         # Ignore undefined annotation
-        if type_of_interaction == 5:
+        if skip_undefined and type_of_interaction == 5:
             continue
 
         annotation = [episode_number, shot_id, person1, person2, type_of_interaction]
@@ -112,7 +112,38 @@ def iou2d(tube1, tube2):
     return iou
 
 
-def get_overlap_over_whole_frame_values(annotation, info_by_shot):
+def get_nb_characters_by_shot(episode_number):
+    annotations = gather_annotations(episode_number, skip_undefined=False)
+
+    nb_characters_by_shot = {}
+
+    previous_shot_id = annotations[0][1]
+    characters = []
+    for annotation in annotations:
+        episode_number, shot_id, person1, person2, type_of_interaction = annotation
+
+        if shot_id != previous_shot_id:
+            # Write info of previous shot
+            nb_characters = len(characters)
+            nb_characters_by_shot[previous_shot_id] = nb_characters
+
+            # Initialize stats of current shot
+            previous_shot_id = shot_id
+            characters = []
+
+        # Update stats of current shot
+        for person in [person1, person2]:
+            if person not in characters:
+                characters.append(person)
+
+    # Write stats of last shot
+    nb_characters = len(characters)
+    nb_characters_by_shot[previous_shot_id] = nb_characters
+
+    return nb_characters_by_shot
+
+
+def get_iou_values(annotation, info_by_shot):
     episode_number, shot_id, person1, person2, type_of_interaction = annotation
 
     tracks_by_shot, track_ids_by_shot, characters_by_shot = info_by_shot
@@ -159,25 +190,30 @@ def get_overlap_over_whole_frame_values(annotation, info_by_shot):
     tube1 = track1[b - b1:(e + 1) - b1, 1:5]
     tube2 = track2[b - b2:(e + 1) - b2, 1:5]
 
-    overlap = overlap2d(tube2, tube1)
-    whole_frame = 1280*720
-    overlap_over_whole_frame = overlap / whole_frame
+    iou = iou2d(tube2, tube1)
 
-    return overlap_over_whole_frame
+    return iou
 
 
-def compute_trajectories_and_averages_over_time():
+def compute_trajectories_and_averages_over_time(nb_characters=None):
     all_tracks = gather_tracks()
     averages_over_time = dict([("no interaction", []), ("non-physical", []), ("physical", [])])
     trajectories = dict([("no interaction", []), ("non-physical", []), ("physical", [])])
     for episode_number in tqdm.tqdm(range(1, 26)):
         annotations = gather_annotations(episode_number)
         info_by_shot = order_tracks(all_tracks, episode_number)
+        nb_characters_by_shot = get_nb_characters_by_shot(episode_number)
         for annotation in annotations:
+            shot_id = annotation[1]
+            if nb_characters is not None:
+                if nb_characters_by_shot[shot_id] != nb_characters:
+                    continue
+                assert nb_characters_by_shot[shot_id] == nb_characters
+
             type_of_interaction = annotation[-1]
             if type_of_interaction == 5:
                 continue
-            values = get_overlap_over_whole_frame_values(annotation, info_by_shot)
+            values = get_iou_values(annotation, info_by_shot)
             if values is None:
                 continue
             average_value = np.mean(values)
@@ -207,30 +243,39 @@ def compute_trajectories_and_averages_over_time():
     return mean_trajectory, averages_over_time
 
 
-def make_histograms_overlap():
-    mean_trajectory, averages_over_time = compute_trajectories_and_averages_over_time()
+def make_histograms_iou(nb_characters=None):
+    mean_trajectory, averages_over_time = compute_trajectories_and_averages_over_time(nb_characters)
 
     output_dir = "results/bboxes_stats"
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     fig, axes= plt.subplots(1, 3)
+    fig.tight_layout()
     max_value = max([max(averages_over_time[cat]) for cat in averages_over_time])
     colors = ["royalblue", "orangered", "olivedrab"]
     for index, ax in enumerate(axes.flatten()):
         cat = list(averages_over_time.keys())[index]
         values = averages_over_time[cat]
 
-        ax.hist(values, density=True, bins=20, color=colors[index])
+        ax.hist(values, density=False, bins=20, color=colors[index])
         ax.set_xlim((0, max_value))
-        ax.set_ylim((0, 50))
-        if index == 0:
-            ax.set_ylabel("Frequency")
+        if nb_characters is None:
+            ax.set_ylim((0, 2000))
+        else:
+            ax.set_ylim((0, 750))
         ax.set_title(cat)
 
     plt.subplots_adjust(top=0.7)
-    fig.suptitle("Histograms of bboxes intersection over\nwhole frame averaged over time for each pair", fontsize=14, y=0.9)
-    plt.savefig("{}/hist_averages_over_time.pdf".format(output_dir))
-    plt.savefig("{}/hist_averages_over_time.png".format(output_dir))
+    title = "Histograms of IoU averaged over time for each pair"
+    if nb_characters is not None:
+        title += "\nfor {}-character shots".format(nb_characters)
+    fig.suptitle(title, fontsize=14, y=0.9)
+
+    file_name = "hist_iou_averages_over_time"
+    if nb_characters is not None:
+        file_name += "_{}-char".format(nb_characters)
+    plt.savefig("{}/{}.pdf".format(output_dir, file_name))
+    plt.savefig("{}/{}.png".format(output_dir, file_name))
 
 
     fig, axes= plt.subplots(3, 1)
@@ -246,9 +291,16 @@ def make_histograms_overlap():
         ax.set_title(cat)
 
     plt.subplots_adjust(top=0.7)
-    fig.suptitle("Evolution of bboxes intersection over whole frame,\naveraged over all pairs", fontsize=14, y=0.9)
-    plt.savefig("{}/hist_mean_trajectories.pdf".format(output_dir))
-    plt.savefig("{}/hist_mean_trajectories.png".format(output_dir))
+    title = "Evolution of IoU,\naveraged over all pairs"
+    if nb_characters is not None:
+        title += "\nfor {}-character shots".format(nb_characters)
+    fig.suptitle(title, fontsize=14, y=0.9)
+    
+    file_name = "hist_iou_mean_trajectories"
+    if nb_characters is not None:
+        file_name += "_{}-char".format(nb_characters)
+    plt.savefig("{}/{}.pdf".format(output_dir, file_name))
+    plt.savefig("{}/{}.png".format(output_dir, file_name))
 
 
 def get_average_head_over_body_value(track_id, episode_number, all_tracks):
@@ -366,8 +418,8 @@ def make_histograms_head_over_body():
         values = values_by_type[cat]
 
         ax.hist(values, density=True, bins=20, color=colors[index])
-        # ax.set_xlim((0, max_value))
-        # ax.set_ylim((0, 50))
+        ax.set_xlim((0, max_value))
+        ax.set_ylim((0, 50))
         if index == 0:
             ax.set_ylabel("Frequency")
         ax.set_title(cat)
@@ -379,6 +431,8 @@ def make_histograms_head_over_body():
 
 
 if __name__ == "__main__":
-    make_histograms_overlap()
+    make_histograms_iou()
+    make_histograms_iou(nb_characters=2)
+    make_histograms_iou(nb_characters=3)
     make_histograms_head_over_body()
     # tube1, tube2 = get_average_head_over_body_value(track_id_2, episode_number, all_tracks)
