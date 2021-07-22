@@ -1,0 +1,8 @@
+The function gather_annotations(episode_number) in parse_csv_annotations.py takes an episode number (an integer between 1 and 25 included) and returns a dictionary containing the list of annotations for each class.
+More precisely, the keys are:
+
+"full physical", "partial physical", "full non-physical", "partial non-physical", "no interaction", "undefined"
+
+and the value for key k is the list of the annotations of this class, where each element is in the form [episode_number, shot_id, person1, person2] (shot_id is a 0-based index).
+
+The function gather_all_annotations() returns a dictionary of the same format but with annotations from all 25 episodes.

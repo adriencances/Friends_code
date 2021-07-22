@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils import data
 import torchvision
+from torchvision import transforms
 
 from dataset_aux import FrameProcessor
 
@@ -40,7 +41,7 @@ class FriendsPairs(data.Dataset):
         self.gather_negative_pairs()
         self.create_data()
         self.init_augmentation_transforms()
-    
+
     def init_augmentation_transforms(self):
         self.color_jitter = torchvision.transforms.ColorJitter(brightness=0.1, contrast=0.3, saturation=0.3, hue=0.05)
         # Remark: because of the format of the data, this function will operate a horizontal flip
@@ -129,36 +130,44 @@ class FriendsPairs(data.Dataset):
 
         tensor1 = self.frame_processor.processed_frames(episode_number, track_id1, frame_indices1)
         tensor2 = self.frame_processor.processed_frames(episode_number, track_id2, frame_indices2)
+        
+        central_frame_indices = frame_indices1[len(frame_indices1) // 2]
+        central_frame = self.frame_processor.preprocessed_frame(episode_number, central_frame_indices)
+        central_frame = transforms.functional.resize(central_frame, [224, 224]).type(torch.float32)
 
         # Augment data
         if self.augmented:
-            tensor12 = torch.cat((tensor1, tensor2), dim=1)
-            tensor12 = self.augmented_tensor(tensor12)
-            tensor1 = tensor12[:,:16]
-            tensor2 = tensor12[:,16:]
+            tensor123 = torch.cat((tensor1, tensor2, central_frame.unsqueeze(dim=1)), dim=1)
+            tensor123 = self.augmented_tensor(tensor123)
+            tensor1 = tensor123[:,:16]
+            tensor2 = tensor123[:,16:32]
+            central_frame = tensor123[:,32]
 
         # Downsample by two to get 8-frame tensors
         if self.eight_frames:
             tensor1 = tensor1[:,::2]
             tensor2 = tensor2[:,::2]
 
-        return tensor1, tensor2, label
+        return tensor1, tensor2, central_frame, label
 
     def __len__(self):
         """Denotes the total number of samples"""
         return len(self.data)
     
-    def print_tensors(self, tensor1, tensor2, subdir):
+    def print_tensors(self, tensor1, tensor2, central_frame, subdir):
         Path(subdir).mkdir(parents=True, exist_ok=True)
 
-        for i in range(tensor1.shape[1]):
-            filename1 = "{}/tensor1_frame_{}.jpg".format(subdir, i + 1)
-            frame1 = tensor1[:,i,:,:].numpy().transpose(2, 1, 0)
-            cv2.imwrite(filename1, frame1)
+        filename1 = "{}/tensor1_frame_{}.jpg".format(subdir, 0)
+        frame1 = tensor1[:,0,:,:].numpy().transpose(2, 1, 0)
+        cv2.imwrite(filename1, frame1)
 
-            filename2 = "{}/tensor2_frame_{}.jpg".format(subdir, i + 1)
-            frame2 = tensor2[:,i,:,:].numpy().transpose(2, 1, 0)
-            cv2.imwrite(filename2, frame2)
+        filename2 = "{}/tensor2_frame_{}.jpg".format(subdir, 0)
+        frame2 = tensor2[:,0,:,:].numpy().transpose(2, 1, 0)
+        cv2.imwrite(filename2, frame2)
+
+        filename = "{}/central_frame.jpg".format(subdir)
+        central_frame = central_frame.numpy().transpose(2, 1, 0)
+        cv2.imwrite(filename, central_frame)
 
 
 if __name__ == "__main__":
@@ -167,8 +176,8 @@ if __name__ == "__main__":
     print("nb negatives: \t", len(dataset.negative_pairs))
 
     # for i in tqdm.tqdm(range(10)):
-    #     t1, t2, lab = dataset[0]
-    #     dataset.print_tensors(t1[:,:1], t2[:,:1], "augmented_examples/pair_0_version_{}".format(i))
+    #     t1, t2, central_frame, lab = dataset[0]
+    #     dataset.print_tensors(t1[:,:1], t2[:,:1], central_frame, "augmented_examples_resnet/pair_0_version_{}".format(i))
 
     # for index in tqdm.tqdm(range(len(dataset))):
     #     content = dataset[index]

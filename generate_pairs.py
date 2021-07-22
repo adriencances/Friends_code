@@ -14,7 +14,7 @@ from pandas_ods_reader import read_ods
 from make_spreadsheets import gather_shots, gather_tracks, generate_all_problematic_shot_dirs, order_tracks
 
 
-main_dir = "/media/hdd/adrien/Friends"
+main_dir = "/home/adrien/Data/Friends"
 shots_dir = main_dir + "/shots"
 annotations_dir = main_dir + "/annotations/filled"
 pairs_dir = main_dir + "/pairs16"
@@ -115,7 +115,6 @@ def sample_random(begin, end):
 
 
 def get_lists_of_frames(track1, track2, type_of_interaction):
-
     b1, e1 = track1[[0, -1], 0]
     b2, e2 = track2[[0, -1], 0]
 
@@ -161,6 +160,27 @@ def is_continuous(track):
     return e - b + 1 == len(track)
 
 
+def get_pair_lists_of_frames_hard_negative(track1, track2, type_of_interaction):
+    if type_of_interaction == 4:
+        return []
+
+    b1, e1 = track1[[0, -1], 0]
+    b2, e2 = track2[[0, -1], 0]
+
+    begin = int(max(b1, b2))
+    end = int(min(e1, e2))
+
+    if end - begin + 1 < 2*SEGMENT_LENGTH + 10:
+        return []
+
+    frame_indices1 = list(range(begin, begin + 16))
+    frame_indices2 = list(range(end - 15, end + 1))
+
+    pair_lists_of_frames = [(frame_indices1, frame_indices2), (frame_indices2, frame_indices1)]
+
+    return pair_lists_of_frames
+
+
 def generate_pairs_for_annotation(annotation, info_by_shot, label):
     episode_number, shot_id, person1, person2, type_of_interaction = annotation
 
@@ -190,15 +210,19 @@ def generate_pairs_for_annotation(annotation, info_by_shot, label):
     track2 = tracks[id2]
 
     if not is_continuous(track1) or not is_continuous(track2):
-        return []
+        return [], []
 
     lists_of_frames = get_lists_of_frames(track1, track2, type_of_interaction)
 
     track_id1 = track_ids[id1]
     track_id2 = track_ids[id2]
-    pairs = [[episode_number, track_id1, track_id2, *frames_list, label] for frames_list in lists_of_frames]
+    pairs = []
+    pairs += [[episode_number, track_id1, track_id2, *frames_list, *frames_list, label] for frames_list in lists_of_frames]
 
-    return pairs
+    pair_lists_of_frames = get_pair_lists_of_frames_hard_negative(track1, track2, type_of_interaction)
+    hard_neg_pairs = [[episode_number, track_id1, track_id2, *frames_list1, *frames_list2, 0] for frames_list1, frames_list2 in pair_lists_of_frames]
+
+    return pairs, hard_neg_pairs
 
 
 def generate_pairs_for_episode(episode_number, all_tracks=None):
@@ -208,12 +232,19 @@ def generate_pairs_for_episode(episode_number, all_tracks=None):
     pos_annotations, neg_annotations = gather_annotations(episode_number)
 
     pos_pairs = []
+    hard_neg_pairs = []
     for annotation in pos_annotations:
-        pos_pairs += generate_pairs_for_annotation(annotation, info_by_shot, label=1)
+        pairs, hard_pairs = generate_pairs_for_annotation(annotation, info_by_shot, label=1)
+        pos_pairs += pairs
+        hard_neg_pairs += hard_pairs
 
     neg_pairs = []
     for annotation in neg_annotations:
-        neg_pairs += generate_pairs_for_annotation(annotation, info_by_shot, label=0)
+        pairs, hard_pairs = generate_pairs_for_annotation(annotation, info_by_shot, label=0)
+        neg_pairs += pairs
+        hard_neg_pairs += hard_pairs
+    
+    # neg_pairs += hard_neg_pairs
 
     pos_subdir = "{}/positive/".format(pairs_dir, episode_number)
     Path(pos_subdir).mkdir(parents=True, exist_ok=True)
@@ -230,15 +261,19 @@ def generate_pairs_for_episode(episode_number, all_tracks=None):
     with open(neg_pairs_file, "w") as f:
         for pair in neg_pairs:
             f.write(",".join(map(str, pair)) + "\n")
+    
+    return len(hard_neg_pairs)
 
 
 def generate_all_pairs():
     all_tracks = gather_tracks()
+    nb_hard_negs = 0
     for episode_number in tqdm.tqdm(range(1, 26)):
         annotation_file = "{}/annotations_ep{:02d}_filled.ods".format(annotations_dir, episode_number)
         if not os.path.isfile(annotation_file):
             continue
-        generate_pairs_for_episode(episode_number, all_tracks)
+        nb_hard_negs += generate_pairs_for_episode(episode_number, all_tracks)
+    print("nb hard negatives: {}".format(nb_hard_negs))
 
 
 if __name__ == "__main__":
