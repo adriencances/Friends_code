@@ -27,9 +27,9 @@ class FriendsPairs(data.Dataset):
         self.phase = phase
         self.eight_frames = eight_frames
         self.augmented = augmented
-        self.frames_dir = "/home/adrien/Data/Friends/frames"
-        self.pairs_dir = "/home/adrien/Data/Friends/pairs16"
-        self.tracks_file = "/home/adrien/Data/Friends/tracks-features/Friends_final.pk"
+        self.frames_dir = "/home/acances/Data/Friends/frames"
+        self.pairs_dir = "/home/acances/Data/Friends/pairs16"
+        self.tracks_file = "/home/acances/Data/Friends/tracks-features/Friends_final.pk"
 
         self.frame_processor = FrameProcessor(self.w, self.h, self.alpha, self.phase, self.frames_dir, self.tracks_file)
 
@@ -56,7 +56,7 @@ class FriendsPairs(data.Dataset):
     
     def gather_episode_numbers(self):
         self.episode_numbers = []
-        split_file = "/home/adrien/Data/Friends/split/{}.txt".format(self.phase)
+        split_file = "/home/acances/Data/Friends/split/{}.txt".format(self.phase)
         with open(split_file, "r") as f:
             for line in f:
                 episode_number = int(line.strip())

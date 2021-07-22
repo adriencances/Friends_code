@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 
-main_dir = "/media/hdd/adrien/Friends"
+main_dir = "/media/hdd/acances/Friends"
 shots_dir = main_dir + "/shots"
 videos_dir = main_dir + "/videos"
 subvideos_dir = main_dir + "/subvideos"

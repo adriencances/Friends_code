@@ -12,7 +12,7 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Alignment
 
 
-main_dir = "/home/adrien/Data/Friends"
+main_dir = "/home/acances/Data/Friends"
 shots_dir = main_dir + "/shots"
 videos_dir = main_dir + "/videos"
 subvideos_dir = main_dir + "/subvideos"

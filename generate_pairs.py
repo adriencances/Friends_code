@@ -14,7 +14,7 @@ from pandas_ods_reader import read_ods
 from make_spreadsheets import gather_shots, gather_tracks, generate_all_problematic_shot_dirs, order_tracks
 
 
-main_dir = "/home/adrien/Data/Friends"
+main_dir = "/home/acances/Data/Friends"
 shots_dir = main_dir + "/shots"
 annotations_dir = main_dir + "/annotations/filled"
 pairs_dir = main_dir + "/pairs16"
